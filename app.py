@@ -101,7 +101,7 @@ def save_data(data):
 
         # Clear existing data and write new data
         sheet.clear()
-        sheet.update('A1', rows)
+        sheet.update(values=rows, range_name='A1')
 
     except Exception as e:
         st.error(f"Error saving data: {e}")
