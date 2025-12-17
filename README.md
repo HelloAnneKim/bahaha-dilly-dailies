@@ -14,7 +14,8 @@ A fun and competitive daily KPI tracking app for you and your friends! Track sle
 - **📊 Personal Progress**: View your individual trends and statistics
 - **🏆 Leaderboard**: Compete with friends and see who's crushing it
 - **📈 Group Analytics**: Compare metrics across all users
-- **💾 Data Persistence**: All data saved locally in JSON format
+- **☁️ Cloud Storage**: All data saved to Google Sheets for real-time sharing
+- **🔄 Real-time Sync**: Everyone sees the same data instantly
 
 ## Setup Instructions
 
@@ -22,19 +23,26 @@ A fun and competitive daily KPI tracking app for you and your friends! Track sle
 
 - Python 3.8 or higher
 - pip (Python package installer)
+- Google Cloud account (free)
+- Access to the shared Google Sheet
 
 ### Installation
 
 1. Clone or download this repository:
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/HelloAnneKim/bahaha-dilly-dailies.git
 cd bahaha-dilly-dailies
 ```
 
 2. Install required dependencies:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
+
+3. **Set up Google Sheets API (REQUIRED)**:
+   - Follow the detailed instructions in [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md)
+   - This is a one-time setup to connect the app to your shared Google Sheet
+   - You'll need to create a service account and download `credentials.json`
 
 ### Running the App
 
@@ -86,26 +94,25 @@ The leaderboard uses a weighted scoring system:
 
 ## Data Storage
 
-All data is stored in `kpi_data.json` in the same directory as the app. This file is automatically created when you first save data.
+All data is stored in **Google Sheets** for real-time sharing between all users!
 
-### Sharing Data with Friends
+**Spreadsheet URL**: https://docs.google.com/spreadsheets/d/1XcW5S3flYiSkOBhxCyJ0VuZGWp462Oa8Eah6LnlAU1U/edit
 
-Since data is stored locally, here are options for sharing:
+### How It Works
 
-#### Option 1: Shared Computer
-Run the app on a shared computer where all friends can access it.
+- When anyone saves data, it's immediately written to the Google Sheet
+- Everyone running the app sees the same shared data
+- You can view/edit data directly in Google Sheets if needed
+- All three friends (anne, bobby, hansa) share the same dataset
+- No need to sync files or worry about conflicts!
 
-#### Option 2: GitHub Sync
-1. Initialize a git repository (see below)
-2. Each person pulls the latest `kpi_data.json` before logging
-3. After logging, commit and push the updated `kpi_data.json`
-4. Other friends pull the updates
+### Benefits
 
-#### Option 3: Cloud Storage
-Keep `kpi_data.json` in a shared folder (Dropbox, Google Drive, etc.) and run the app from there.
-
-#### Option 4: Deploy to Cloud (Advanced)
-Deploy to Streamlit Community Cloud, Heroku, or other hosting service. You'll need to add a proper database for multi-user concurrent access.
+- ✅ Real-time collaboration
+- ✅ No manual syncing required
+- ✅ Data accessible from anywhere
+- ✅ Can view/edit directly in Google Sheets
+- ✅ Automatic backups through Google
 
 ## Git Setup (Optional)
 

@@ -5,6 +5,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date
 from pathlib import Path
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Page config
 st.set_page_config(
@@ -13,19 +15,96 @@ st.set_page_config(
     layout="wide"
 )
 
-# Data file path
-DATA_FILE = Path("kpi_data.json")
+# Google Sheets setup
+SPREADSHEET_ID = "1XcW5S3flYiSkOBhxCyJ0VuZGWp462Oa8Eah6LnlAU1U"
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive'
+]
 
-# Initialize data structure
+def get_google_sheet():
+    """Connect to Google Sheets using service account credentials"""
+    try:
+        # Check if credentials file exists
+        creds_file = Path("credentials.json")
+        if not creds_file.exists():
+            st.error("⚠️ credentials.json not found. Please add your Google service account credentials.")
+            st.info("See README.md for setup instructions.")
+            return None
+
+        creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        return sheet
+    except Exception as e:
+        st.error(f"Error connecting to Google Sheets: {e}")
+        return None
+
 def load_data():
-    if DATA_FILE.exists():
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+    """Load data from Google Sheets"""
+    sheet = get_google_sheet()
+    if sheet is None:
+        return {}
+
+    try:
+        # Get all records from the sheet
+        records = sheet.get_all_records()
+
+        # Convert to nested dictionary format: {user: {date: {metrics}}}
+        data = {}
+        for record in records:
+            user = record.get('user', '')
+            date_str = record.get('date', '')
+
+            if user and date_str:
+                if user not in data:
+                    data[user] = {}
+
+                data[user][date_str] = {
+                    'sleep': float(record.get('sleep', 0)),
+                    'exercise': record.get('exercise', 'FALSE') == 'TRUE',
+                    'pt_quota': record.get('pt_quota', 'FALSE') == 'TRUE',
+                    'water': int(record.get('water', 0)),
+                    'protein': int(record.get('protein', 0)),
+                    'notes': record.get('notes', ''),
+                    'timestamp': record.get('timestamp', '')
+                }
+
+        return data
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return {}
 
 def save_data(data):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    """Save data to Google Sheets"""
+    sheet = get_google_sheet()
+    if sheet is None:
+        return
+
+    try:
+        # Convert nested dictionary to list of rows
+        rows = [['user', 'date', 'sleep', 'exercise', 'pt_quota', 'water', 'protein', 'notes', 'timestamp']]
+
+        for user, dates in data.items():
+            for date_str, metrics in dates.items():
+                rows.append([
+                    user,
+                    date_str,
+                    metrics.get('sleep', 0),
+                    'TRUE' if metrics.get('exercise', False) else 'FALSE',
+                    'TRUE' if metrics.get('pt_quota', False) else 'FALSE',
+                    metrics.get('water', 0),
+                    metrics.get('protein', 0),
+                    metrics.get('notes', ''),
+                    metrics.get('timestamp', '')
+                ])
+
+        # Clear existing data and write new data
+        sheet.clear()
+        sheet.update('A1', rows)
+
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
 
 # Load data
 if 'data' not in st.session_state:
@@ -37,7 +116,7 @@ st.markdown("### Track your daily KPIs and compete with friends!")
 
 # Sidebar for user selection
 st.sidebar.title("User Login")
-users = ["Friend 1", "Friend 2", "Friend 3"]
+users = ["anne", "bobby", "hansa"]
 selected_user = st.sidebar.selectbox("Select your name:", users)
 
 # Add custom name option

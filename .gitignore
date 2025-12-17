@@ -43,6 +43,9 @@ env/
 # Data files (optional - remove if you want to track kpi_data.json)
 # kpi_data.json
 
+# Google Sheets credentials (NEVER commit this!)
+credentials.json
+
 # Logs
 *.log
 
