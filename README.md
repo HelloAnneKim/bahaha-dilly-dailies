@@ -1,4 +1,4 @@
-# 🏆 Bahaha Dilly Dailies
+# 🏆 bahaha dilly dailies
 
 A fun and competitive daily KPI tracking app for you and your friends! Track sleep, exercise, PT quotas, water intake, and protein consumption while competing on a leaderboard.
 
