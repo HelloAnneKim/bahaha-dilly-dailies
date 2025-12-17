@@ -25,14 +25,21 @@ SCOPES = [
 def get_google_sheet():
     """Connect to Google Sheets using service account credentials"""
     try:
-        # Check if credentials file exists
-        creds_file = Path("credentials.json")
-        if not creds_file.exists():
-            st.error("⚠️ credentials.json not found. Please add your Google service account credentials.")
-            st.info("See README.md for setup instructions.")
-            return None
+        # Try to load from Streamlit secrets first (for cloud deployment)
+        if "gcp_service_account" in st.secrets:
+            creds = Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"],
+                scopes=SCOPES
+            )
+        # Fall back to local credentials.json file (for local development)
+        else:
+            creds_file = Path("credentials.json")
+            if not creds_file.exists():
+                st.error("⚠️ credentials.json not found. Please add your Google service account credentials.")
+                st.info("See README.md for setup instructions.")
+                return None
+            creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
 
-        creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(SPREADSHEET_ID).sheet1
         return sheet
