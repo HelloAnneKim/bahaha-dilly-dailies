@@ -26,8 +26,8 @@ USER_CONFIG = {
     },
     "anne": {
         "columns": ['user', 'date', 'sleep_rested', 'knee_pt_minutes', 'back_pt_minutes', 'protein', 'water',
-                   'cardio_minutes', 'strength_minutes', 'mental_health_days', 'notes', 'timestamp'],
-        "weekly_goals": {'cardio_minutes': 4, 'strength_minutes': 2},  # 4x and 2x per week
+                   'cardio_minutes', 'push_strength_minutes', 'pull_strength_minutes', 'good_mental_health_day', 'notes', 'timestamp'],
+        "weekly_goals": {'cardio_minutes': 4, 'push_strength_minutes': 2, 'pull_strength_minutes': 2},  # 4x cardio, 2x push, 2x pull per week
         "daily_goals": {'sleep_rested': True, 'knee_pt_minutes': True, 'back_pt_minutes': True,
                        'protein': 100, 'water': 80}
     },
@@ -77,7 +77,8 @@ def save_user_data(user, df):
 
 # App title
 st.title("🏆 Bahaha Dilly Dailies")
-st.markdown("### Track your daily KPIs and compete with friends!")
+st.markdown("*<small>(bobby, anne, hansa, anne, harini, anne, vinay with a silent v)</small>*", unsafe_allow_html=True)
+st.markdown("### Let's get after 2026, frens!")
 
 # Sidebar for user selection
 st.sidebar.title("User Login")
@@ -116,8 +117,9 @@ elif selected_user == "anne":
     - 🥩 Protein: 100g daily
     - 💧 Water: 80oz daily
     - 🏃 Cardio: 4x/week
-    - 💪 Strength: 2x/week
-    - 🧠 Mental Health: Track days
+    - 💪 Push (chest, shoulders, triceps, quads) 1x/week
+    - 💪 Pull (lats, biceps, hamstrings, glutes) 1x/week
+    - 🧠 Mental Health: Daily check-in
     """)
 elif selected_user == "vinay":
     st.sidebar.markdown("""
@@ -137,7 +139,7 @@ elif selected_user == "harini":
     """)
 
 # Main tabs
-tab1, tab2, tab3 = st.tabs(["📝 Log Today", "📊 My Progress", "🏆 Leaderboard"])
+tab1, tab2, tab3 = st.tabs(["📝 Log Today", "📊 My Progress", "😎 Good Looking Week"])
 
 # Tab 1: Log Today's KPIs (Custom per user)
 with tab1:
@@ -293,20 +295,26 @@ with tab1:
                     help="Goal: 4x per week"
                 )
 
-                new_entry['strength_minutes'] = st.number_input(
-                    "💪 Strength Training (minutes)",
+                new_entry['push_strength_minutes'] = st.number_input(
+                    "💪 Push Strength (minutes)",
                     min_value=0,
                     max_value=500,
-                    value=int(existing_data.get('strength_minutes', 0)),
-                    help="Goal: 2x per week"
+                    value=int(existing_data.get('push_strength_minutes', 0)),
+                    help="Goal: 2x per week | Chest, shoulders, triceps, quads"
                 )
 
-                new_entry['mental_health_days'] = st.number_input(
-                    "🧠 Days Since Last Bad Mental Health Day",
+                new_entry['pull_strength_minutes'] = st.number_input(
+                    "💪 Pull Strength (minutes)",
                     min_value=0,
-                    max_value=1000,
-                    value=int(existing_data.get('mental_health_days', 0)),
-                    help="Track your mental health streak"
+                    max_value=500,
+                    value=int(existing_data.get('pull_strength_minutes', 0)),
+                    help="Goal: 2x per week | Lats, biceps, hamstrings, glutes"
+                )
+
+                new_entry['good_mental_health_day'] = st.checkbox(
+                    "🧠 Good Mental Health Today",
+                    value=bool(existing_data.get('good_mental_health_day', True)),
+                    help="Check if you're having a good mental health day"
                 )
 
         # Vinay's custom form
@@ -504,11 +512,22 @@ with tab2:
                 cardio_days = (user_df['cardio_minutes'] > 0).sum()
                 st.metric("Cardio Days", f"{cardio_days}", help="Goal: 4x/week")
 
-                strength_days = (user_df['strength_minutes'] > 0).sum()
-                st.metric("Strength Days", f"{strength_days}", help="Goal: 2x/week")
+                push_days = (user_df['push_strength_minutes'] > 0).sum() if 'push_strength_minutes' in user_df.columns else 0
+                st.metric("Push Strength Days", f"{push_days}", help="Goal: 2x/week")
 
-                current_mh = user_df['mental_health_days'].iloc[-1] if len(user_df) > 0 else 0
-                st.metric("Mental Health Streak", f"{current_mh} days")
+                pull_days = (user_df['pull_strength_minutes'] > 0).sum() if 'pull_strength_minutes' in user_df.columns else 0
+                st.metric("Pull Strength Days", f"{pull_days}", help="Goal: 2x/week")
+
+                # Calculate current streak of good mental health days
+                mh_streak = 0
+                if len(user_df) > 0 and 'good_mental_health_day' in user_df.columns:
+                    # Count backwards from most recent day
+                    for i in range(len(user_df) - 1, -1, -1):
+                        if user_df.iloc[i]['good_mental_health_day']:
+                            mh_streak += 1
+                        else:
+                            break
+                st.metric("Mental Health Streak", f"{mh_streak} days")
 
         elif selected_user == "vinay":
             col1, col2, col3, col4 = st.columns(4)
@@ -634,11 +653,11 @@ with tab2:
     else:
         st.info("No data logged yet. Go to 'Log Today' to start tracking!")
 
-# Tab 3: Leaderboard
+# Tab 3: Good Looking Week
 with tab3:
-    st.header("🏆 Leaderboard")
+    st.header("😎 Good Looking Weeks")
 
-    st.info("💡 The leaderboard calculates scores based on each person's individual goals and completion rates.")
+    st.info("💡 Who's having a good looking week? Scores are based on each person's individual goals and completion rates.")
 
     leaderboard_data = []
 
@@ -676,17 +695,19 @@ with tab3:
 
         elif user == "anne":
             # Daily goals: sleep rested, knee PT, back PT, protein 100g, water 80oz
-            # Weekly goals: cardio 4x, strength 2x
+            # Weekly goals: cardio 4x, push strength 2x, pull strength 2x
             sleep_rate = user_specific_df['sleep_rested'].sum() / total_days if total_days > 0 else 0
             knee_pt_rate = (user_specific_df['knee_pt_minutes'] > 0).sum() / total_days if total_days > 0 else 0
             back_pt_rate = (user_specific_df['back_pt_minutes'] > 0).sum() / total_days if total_days > 0 else 0
             protein_rate = (user_specific_df['protein'] >= 100).sum() / total_days if total_days > 0 else 0
             water_rate = (user_specific_df['water'] >= 80).sum() / total_days if total_days > 0 else 0
             cardio_rate = (user_specific_df['cardio_minutes'] > 0).sum() / total_days if total_days > 0 else 0
-            strength_rate = (user_specific_df['strength_minutes'] > 0).sum() / total_days if total_days > 0 else 0
+            push_strength_rate = (user_specific_df['push_strength_minutes'] > 0).sum() / total_days if total_days > 0 and 'push_strength_minutes' in user_specific_df.columns else 0
+            pull_strength_rate = (user_specific_df['pull_strength_minutes'] > 0).sum() / total_days if total_days > 0 and 'pull_strength_minutes' in user_specific_df.columns else 0
 
-            score = (sleep_rate * 15) + (knee_pt_rate * 15) + (back_pt_rate * 15) + \
-                   (protein_rate * 15) + (water_rate * 15) + (cardio_rate * 12.5) + (strength_rate * 12.5)
+            score = (sleep_rate * 15) + (knee_pt_rate * 12) + (back_pt_rate * 12) + \
+                   (protein_rate * 12) + (water_rate * 12) + (cardio_rate * 12) + \
+                   (push_strength_rate * 12.5) + (pull_strength_rate * 12.5)
 
         elif user == "vinay":
             # Daily goals: drinks ≤2, PT minutes, workout minutes
@@ -720,7 +741,7 @@ with tab3:
         lb_df.index = lb_df.index + 1
 
         # Display podium
-        st.subheader("🏅 Rankings")
+        st.subheader("🏅 This Week's Vibes")
         cols = st.columns(len(lb_df))
         medals = ['🥇', '🥈', '🥉', '🏅', '🏅']
 
@@ -732,8 +753,8 @@ with tab3:
                 st.metric("Score", f"{row['Overall Score']:.1f}/100")
                 st.caption(f"{row['Total Days']} days logged")
 
-        # Detailed leaderboard
-        st.subheader("📊 Detailed Rankings")
+        # Detailed view
+        st.subheader("📊 Detailed View")
         st.dataframe(lb_df, use_container_width=True)
 
         st.caption("""
@@ -742,8 +763,8 @@ with tab3:
         """)
 
     else:
-        st.info("No data available yet. Start logging to see the leaderboard!")
+        st.info("No data available yet. Start logging to see who's having a good looking week!")
 
 # Footer
 st.markdown("---")
-st.markdown("Made with ❤️ for tracking daily progress | 🏆 Keep grinding! Happy New Year!!")
+st.markdown("Made with ❤️ for tracking daily progress | 🏆 Happy New Year!!")

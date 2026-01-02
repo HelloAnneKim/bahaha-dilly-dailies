@@ -1,21 +1,20 @@
-# 🏆 bahaha+v dilly dailies
+# 🏆 Bahaha Dilly Dailies
+*(bobby, anne, hansa, anne, harini, anne, vinay with a silent v)*
 
-A personal kpi tracking app for a couple of friendos
+A personal KPI tracking app for five friends with completely customized goals and metrics
 
 ## Features
 
-- **📝 Daily Logging**: Log your daily KPIs including:
-  - 💤 Sleep (hours)
-  - 🏃 Exercise completion
-  - 💪 PT quota completion
-  - 💧 Water intake (oz)
-  - 🥩 Protein intake (grams)
-  etc etc etc
+- **📝 Daily Logging**: Each person tracks their own personalized KPIs:
+  - **Bobby**: Strength workouts, PT/mobility, eating enough, RHR, VO2max
+  - **Hansa**: Strength, mobility, glute exercises, cardio, added sugar
+  - **Anne**: Sleep quality, knee/back PT, protein, water, cardio, push/pull strength, mental health
+  - **Vinay**: Sleep hours, drinks, PT, red meat, strength, workout minutes
+  - **Harini**: Screen time, yoga, strength, outdoor walking
 
-- **📊 Personal Progress**: View your individual trends and statistics
-- **🏆 Leaderboard**: Encourage friends as they complete their weekly/daily goals
-- **📈 Group Analytics**: Compare metrics across all users
-- **☁️ Cloud Storage**: All data saved to Google Sheets for real-time sharing
+- **📊 Personal Progress**: View your individual trends, charts, and statistics based on your custom goals
+- **😎 Good Looking Weeks**: See who's having a good looking week! Scores based on each person's individual goal completion
+- **☁️ Cloud Storage**: All data saved to Google Sheets in separate tabs for each person
 - **🔄 Real-time Sync**: Everyone sees the same data instantly
 
 ## Setup Instructions
@@ -54,20 +53,16 @@ streamlit run app.py
 
 The app will automatically open in your default browser at `http://localhost:8501`
 
-### Customizing User Names
+### Google Sheet Setup
 
-To change the default user names ("Friend 1", "Friend 2", "Friend 3"):
+**IMPORTANT**: Your Google Sheet must have **5 separate tabs** named exactly:
+- `anne`
+- `bobby`
+- `hansa`
+- `vinay`
+- `harini`
 
-1. Open `app.py` in a text editor
-2. Find this line (around line 38):
-```python
-users = ["Friend 1", "Friend 2", "Friend 3"]
-```
-3. Replace with your actual names:
-```python
-users = ["Alice", "Bob", "Charlie"]
-```
-4. Save the file and restart the app
+Each person's data will be stored in their own tab with their custom columns.
 
 ## How to Use
 
@@ -75,31 +70,31 @@ users = ["Alice", "Bob", "Charlie"]
 
 1. Select your name from the sidebar dropdown
 2. Go to the "📝 Log Today" tab
-3. Enter your metrics for the day
+3. Enter your personalized metrics for the day (each person has different fields based on their goals)
 4. Click "💾 Save Today's Data"
 
 ### Viewing Progress
 
-- **My Progress**: See your personal trends, charts, and statistics
-- **Leaderboard**: View rankings and see who's winning
-- **Analytics**: Compare metrics across all users with detailed charts
+- **📊 My Progress**: See your personal trends, charts, and statistics customized for your goals
+- **😎 Good Looking Weeks**: See who's having a good looking week based on goal completion rates
 
 ## Scoring System
 
-The leaderboard uses a scoring system of percentage of daily and weekly goals completed.
+Each person is scored out of 100 based on their individual goals. The scoring reflects what percentage of personal daily and weekly goals were met across all logged days. Since everyone has different goals, this ensures fair comparison!
 
 ## Data Storage
 
-All data is stored in **Google Sheets** for real-time sharing between all users!
+All data is stored in **Google Sheets** with separate tabs for each person!
 
 **Spreadsheet URL**: https://docs.google.com/spreadsheets/d/1XcW5S3flYiSkOBhxCyJ0VuZGWp462Oa8Eah6LnlAU1U/edit
 
 ### How It Works
 
-- When anyone saves data, it's immediately written to the Google Sheet
-- Everyone running the app sees the same shared data
+- Each person has their own tab in the Google Sheet (anne, bobby, hansa, vinay, harini)
+- When anyone saves data, it's immediately written to their tab in the Google Sheet
+- Everyone running the app sees the same shared data in real-time
 - You can view/edit data directly in Google Sheets if needed
-- All five friends (anne, bobby, hansa, vinay, harini) share the same dataset but separated in different google sheet tabs of the same
+- Each tab has different columns based on that person's custom KPIs
 - No need to sync files or worry about conflicts!
 
 ### Benefits
@@ -142,20 +137,20 @@ streamlit run app.py --server.port 8502
 Potential features to add:
 - [ ] Weekly/monthly challenges
 - [ ] Achievement badges
-- [ ] Custom KPI targets per user
 - [ ] Photo uploads for meals
 - [ ] Export data to CSV
 - [ ] Mobile-responsive design improvements
 - [ ] Dark mode
 - [ ] Notifications/reminders
+- [ ] Weekly summaries and insights
 
 ## Contributing
 
 Feel free to fork this repo and add your own features! Some ideas:
-- Add more KPI types
+- Add more personalized KPI types for each person
 - Improve the scoring algorithm
-- Create different leaderboard views
-- Add data visualization options
+- Add more visualization options
+- Create weekly/monthly summary views
 
 ## License
 
