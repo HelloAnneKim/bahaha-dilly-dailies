@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, timedelta
+import pytz
 
 # Page config
 st.set_page_config(
@@ -33,7 +34,7 @@ USER_CONFIG = {
     },
     "vinay": {
         "columns": ['user', 'date', 'sleep_hours', 'drinks_daily', 'pt_minutes', 'red_meat',
-                   'strength_workout', 'workout_minutes', 'notes', 'timestamp'],
+                   'strength_workout', 'workout_minutes', 'saw_anne', 'notes', 'timestamp'],
         "weekly_goals": {'strength_workout': 2, 'drinks_daily': 12, 'red_meat': 7},  # max per week
         "daily_goals": {'drinks_daily': 2, 'pt_minutes': True, 'workout_minutes': True}
     },
@@ -44,6 +45,24 @@ USER_CONFIG = {
         "daily_goals": {'outdoor_walking_minutes': True}
     }
 }
+
+# Helper function to get current tracking date (deadline is 3am ET)
+def get_tracking_date():
+    """
+    Returns the current tracking date.
+    If it's before 3am ET, returns yesterday's date.
+    If it's 3am ET or later, returns today's date.
+    """
+    et_tz = pytz.timezone('US/Eastern')
+    current_time_et = datetime.now(et_tz)
+
+    # If it's before 3am ET, use yesterday's date
+    if current_time_et.hour < 3:
+        tracking_date = (current_time_et - timedelta(days=1)).date()
+    else:
+        tracking_date = current_time_et.date()
+
+    return str(tracking_date)
 
 # Connect to Google Sheets
 @st.cache_resource
@@ -79,6 +98,16 @@ def save_user_data(user, df):
 st.title("🏆 Bahaha Dilly Dailies")
 st.markdown("*<small>(bobby, anne, hansa, anne, harini, anne, vinay with a silent v)</small>*", unsafe_allow_html=True)
 st.markdown("### Let's get after 2026, frens!")
+
+# Custom CSS to make selectbox arrow icon bigger on mobile
+st.markdown("""
+<style>
+    /* Make just the dropdown arrow icon 2x bigger */
+    .stSelectbox svg {
+        transform: scale(2) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Sidebar for user selection
 st.sidebar.title("User Login")
@@ -129,6 +158,7 @@ elif selected_user == "vinay":
     - 🥩 Red Meat: Track daily/weekly
     - 💪 Strength: 2x/week
     - 🏃 Workout: Daily minutes
+    - 👀 Times Saw Anne: Track daily
     """)
 elif selected_user == "harini":
     st.sidebar.markdown("""
@@ -145,7 +175,7 @@ tab1, tab2, tab3 = st.tabs(["📝 Log Today", "📊 My Progress", "😎 Good Loo
 with tab1:
     st.header(f"Log KPIs for {selected_user}")
 
-    today = str(date.today())
+    today = get_tracking_date()
 
     # Check if already logged today
     user_data = st.session_state.df[
@@ -283,6 +313,7 @@ with tab1:
                     min_value=0,
                     max_value=300,
                     value=int(existing_data.get('water', 0)),
+                    step=8,
                     help="Goal: 80oz daily"
                 )
 
@@ -365,6 +396,14 @@ with tab1:
                     max_value=500,
                     value=int(existing_data.get('workout_minutes', 0)),
                     help="Daily workout minutes"
+                )
+
+                new_entry['saw_anne'] = st.number_input(
+                    "👀 Times Saw Anne",
+                    min_value=0,
+                    max_value=20,
+                    value=int(existing_data.get('saw_anne', 0)),
+                    help="Track how many times you saw Anne today"
                 )
 
         # Harini's custom form
@@ -530,7 +569,7 @@ with tab2:
                 st.metric("Mental Health Streak", f"{mh_streak} days")
 
         elif selected_user == "vinay":
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
 
             with col1:
                 avg_sleep = user_df['sleep_hours'].mean()
@@ -547,6 +586,10 @@ with tab2:
             with col4:
                 strength_pct = (user_df['strength_workout'].sum() / len(user_df)) * 100
                 st.metric("Strength Rate", f"{strength_pct:.0f}%", help="Goal: 29% (2/7 days)")
+
+            with col5:
+                avg_saw_anne = user_df['saw_anne'].mean() if 'saw_anne' in user_df.columns else 0
+                st.metric("Avg Times Saw Anne", f"{avg_saw_anne:.1f}")
 
         elif selected_user == "harini":
             col1, col2, col3, col4 = st.columns(4)
