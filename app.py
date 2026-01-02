@@ -16,9 +16,9 @@ st.set_page_config(
 # User configurations with their custom KPIs
 USER_CONFIG = {
     "bobby": {
-        "columns": ['user', 'date', 'strength_workout', 'pt_mobility', 'eating_enough', 'rhr', 'vo2max', 'notes', 'timestamp'],
+        "columns": ['user', 'date', 'strength_workout', 'pt_mobility', 'eating_enough', 'rhr', 'vo2max', 'play_with_sony', 'hrv', 'notes', 'timestamp'],
         "weekly_goals": {'strength_workout': 3},
-        "daily_goals": {'pt_mobility': True, 'eating_enough': True}
+        "daily_goals": {'pt_mobility': True, 'eating_enough': True, 'play_with_sony': True}
     },
     "hansa": {
         "columns": ['user', 'date', 'strength_workout', 'mobility', 'glute_exercises', 'cardio', 'added_sugar', 'notes', 'timestamp'],
@@ -128,7 +128,9 @@ if selected_user == "bobby":
     - 💪 Strength: 3x/week
     - 🧘 PT/Mobility: Daily
     - 🍽️ Eating Enough: Daily
+    - 🐱 Play with Sony: 5 min daily
     - ❤️ Track RHR & VO2max
+    - 📊 Track HRV
     """)
 elif selected_user == "hansa":
     st.sidebar.markdown("""
@@ -218,6 +220,12 @@ with tab1:
                     help="Daily goal"
                 )
 
+                new_entry['play_with_sony'] = st.checkbox(
+                    "🐱 Play 5 Min with Sony",
+                    value=bool(existing_data.get('play_with_sony', False)),
+                    help="Daily goal: 5 minutes"
+                )
+
             with col2:
                 new_entry['rhr'] = st.number_input(
                     "❤️ Resting Heart Rate (bpm)",
@@ -234,6 +242,14 @@ with tab1:
                     value=float(existing_data.get('vo2max', 0.0)),
                     step=0.1,
                     help="Optional tracking"
+                )
+
+                new_entry['hrv'] = st.number_input(
+                    "📊 HRV Morning Reading",
+                    min_value=0,
+                    max_value=300,
+                    value=int(existing_data.get('hrv', 0)),
+                    help="Heart Rate Variability"
                 )
 
         # Hansa's custom form
@@ -486,7 +502,7 @@ with tab2:
         st.subheader("📊 Summary Statistics")
 
         if selected_user == "bobby":
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
 
             with col1:
                 strength_pct = (user_df['strength_workout'].sum() / len(user_df)) * 100 if len(user_df) > 0 else 0
@@ -501,8 +517,16 @@ with tab2:
                 st.metric("Eating Enough Rate", f"{eating_pct:.0f}%", help="Goal: 100%")
 
             with col4:
+                sony_pct = (user_df['play_with_sony'].sum() / len(user_df)) * 100 if len(user_df) > 0 and 'play_with_sony' in user_df.columns else 0
+                st.metric("Sony Play Rate", f"{sony_pct:.0f}%", help="Goal: 100%")
+
+            with col5:
                 avg_rhr = user_df[user_df['rhr'] > 0]['rhr'].mean() if (user_df['rhr'] > 0).any() else 0
                 st.metric("Avg RHR", f"{avg_rhr:.0f} bpm")
+
+            with col6:
+                avg_hrv = user_df[user_df['hrv'] > 0]['hrv'].mean() if 'hrv' in user_df.columns and (user_df['hrv'] > 0).any() else 0
+                st.metric("Avg HRV", f"{avg_hrv:.0f}")
 
         elif selected_user == "hansa":
             col1, col2, col3, col4, col5 = st.columns(5)
@@ -718,12 +742,13 @@ with tab3:
 
         if user == "bobby":
             # Weekly goals: strength 3x
-            # Daily goals: PT/mobility, eating enough
+            # Daily goals: PT/mobility, eating enough, play with Sony
             strength_rate = user_specific_df['strength_workout'].sum() / total_days if total_days > 0 else 0
             pt_rate = user_specific_df['pt_mobility'].sum() / total_days if total_days > 0 else 0
             eating_rate = user_specific_df['eating_enough'].sum() / total_days if total_days > 0 else 0
+            sony_rate = user_specific_df['play_with_sony'].sum() / total_days if total_days > 0 and 'play_with_sony' in user_specific_df.columns else 0
 
-            score = (strength_rate * 30) + (pt_rate * 35) + (eating_rate * 35)
+            score = (strength_rate * 25) + (pt_rate * 25) + (eating_rate * 25) + (sony_rate * 25)
 
         elif user == "hansa":
             # Weekly goals: strength 2x, glute 2x, cardio 4x
