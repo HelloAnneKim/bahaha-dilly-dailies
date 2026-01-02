@@ -1,6 +1,6 @@
-# 🏆 bahaha dilly dailies
+# 🏆 bahaha+v dilly dailies
 
-A fun and competitive daily KPI tracking app for you and your friends! Track sleep, exercise, PT quotas, water intake, and protein consumption while competing on a leaderboard.
+A personal kpi tracking app for a couple of friendos
 
 ## Features
 
@@ -10,9 +10,10 @@ A fun and competitive daily KPI tracking app for you and your friends! Track sle
   - 💪 PT quota completion
   - 💧 Water intake (oz)
   - 🥩 Protein intake (grams)
+  etc etc etc
 
 - **📊 Personal Progress**: View your individual trends and statistics
-- **🏆 Leaderboard**: Compete with friends and see who's crushing it
+- **🏆 Leaderboard**: Encourage friends as they complete their weekly/daily goals
 - **📈 Group Analytics**: Compare metrics across all users
 - **☁️ Cloud Storage**: All data saved to Google Sheets for real-time sharing
 - **🔄 Real-time Sync**: Everyone sees the same data instantly
@@ -85,12 +86,7 @@ users = ["Alice", "Bob", "Charlie"]
 
 ## Scoring System
 
-The leaderboard uses a weighted scoring system:
-- Sleep goal met (≥8 hours): 10 points per day
-- Exercise completed: 15 points per day
-- PT quota completed: 15 points per day
-- Average water intake: bonus points
-- Average protein intake: bonus points
+The leaderboard uses a scoring system of percentage of daily and weekly goals completed.
 
 ## Data Storage
 
@@ -103,7 +99,7 @@ All data is stored in **Google Sheets** for real-time sharing between all users!
 - When anyone saves data, it's immediately written to the Google Sheet
 - Everyone running the app sees the same shared data
 - You can view/edit data directly in Google Sheets if needed
-- All three friends (anne, bobby, hansa) share the same dataset
+- All five friends (anne, bobby, hansa, vinay, harini) share the same dataset but separated in different google sheet tabs of the same
 - No need to sync files or worry about conflicts!
 
 ### Benefits
@@ -167,4 +163,4 @@ Free to use and modify for personal use!
 
 ---
 
-Made with ❤️ for tracking daily progress | Keep grinding! 💪
+Made with ❤️ for tracking daily progress | Happy New Year!!
