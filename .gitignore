@@ -46,6 +46,9 @@ env/
 # Google Sheets credentials (NEVER commit this!)
 credentials.json
 
+# Sensitive customization files
+customizations.md
+
 # Logs
 *.log
 
