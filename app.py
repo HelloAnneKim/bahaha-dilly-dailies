@@ -548,7 +548,7 @@ with tab2:
                 st.metric("Cardio Rate", f"{cardio_pct:.0f}%", help="Goal: 57% (4/7 days)")
 
             with col5:
-                avg_sugar = user_df['added_sugar'].mean()
+                avg_sugar = user_df['added_sugar'].mean() if 'added_sugar' in user_df.columns and not user_df['added_sugar'].isna().all() else 0
                 st.metric("Avg Sugar", f"{avg_sugar:.0f}g", help="Goal: <25g")
 
         elif selected_user == "anne":
@@ -558,17 +558,17 @@ with tab2:
                 sleep_pct = (user_df['sleep_rested'].sum() / len(user_df)) * 100
                 st.metric("Rested Sleep %", f"{sleep_pct:.0f}%")
 
-                avg_knee_pt = user_df['knee_pt_minutes'].mean()
+                avg_knee_pt = user_df['knee_pt_minutes'].mean() if 'knee_pt_minutes' in user_df.columns and not user_df['knee_pt_minutes'].isna().all() else 0
                 st.metric("Avg Knee PT", f"{avg_knee_pt:.0f} min")
 
-                avg_back_pt = user_df['back_pt_minutes'].mean()
+                avg_back_pt = user_df['back_pt_minutes'].mean() if 'back_pt_minutes' in user_df.columns and not user_df['back_pt_minutes'].isna().all() else 0
                 st.metric("Avg Back PT", f"{avg_back_pt:.0f} min")
 
             with col2:
-                avg_protein = user_df['protein'].mean()
+                avg_protein = user_df['protein'].mean() if 'protein' in user_df.columns and not user_df['protein'].isna().all() else 0
                 st.metric("Avg Protein", f"{avg_protein:.0f}g", help="Goal: 100g")
 
-                avg_water = user_df['water'].mean()
+                avg_water = user_df['water'].mean() if 'water' in user_df.columns and not user_df['water'].isna().all() else 0
                 st.metric("Avg Water", f"{avg_water:.0f}oz", help="Goal: 80oz")
 
             with col3:
@@ -596,15 +596,15 @@ with tab2:
             col1, col2, col3, col4, col5 = st.columns(5)
 
             with col1:
-                avg_sleep = user_df['sleep_hours'].mean()
+                avg_sleep = user_df['sleep_hours'].mean() if 'sleep_hours' in user_df.columns and not user_df['sleep_hours'].isna().all() else 0
                 st.metric("Avg Sleep", f"{avg_sleep:.1f}h")
 
             with col2:
-                avg_drinks = user_df['drinks_daily'].mean()
+                avg_drinks = user_df['drinks_daily'].mean() if 'drinks_daily' in user_df.columns and not user_df['drinks_daily'].isna().all() else 0
                 st.metric("Avg Drinks/Day", f"{avg_drinks:.1f}", help="Goal: ≤2")
 
             with col3:
-                avg_pt = user_df['pt_minutes'].mean()
+                avg_pt = user_df['pt_minutes'].mean() if 'pt_minutes' in user_df.columns and not user_df['pt_minutes'].isna().all() else 0
                 st.metric("Avg PT", f"{avg_pt:.0f} min")
 
             with col4:
@@ -619,7 +619,7 @@ with tab2:
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                avg_screen = user_df['screen_time_minutes'].mean()
+                avg_screen = user_df['screen_time_minutes'].mean() if 'screen_time_minutes' in user_df.columns and not user_df['screen_time_minutes'].isna().all() else 0
                 st.metric("Avg Screen Time", f"{avg_screen:.0f} min")
 
             with col2:
@@ -631,7 +631,7 @@ with tab2:
                 st.metric("Strength Rate", f"{strength_pct:.0f}%", help="Goal: 29% (2/7 days)")
 
             with col4:
-                avg_walking = user_df['outdoor_walking_minutes'].mean()
+                avg_walking = user_df['outdoor_walking_minutes'].mean() if 'outdoor_walking_minutes' in user_df.columns and not user_df['outdoor_walking_minutes'].isna().all() else 0
                 st.metric("Avg Walking", f"{avg_walking:.0f} min")
 
         # Charts section
