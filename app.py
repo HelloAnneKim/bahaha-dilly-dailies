@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, timedelta
@@ -220,57 +221,170 @@ def load_user_data(user):
         st.exception(e)
         return pd.DataFrame(), None
 
-def save_user_data(user, data_df, config):
-    """Save data to user's specific Google Sheet tab, preserving config rows (1-10)"""
+def save_user_data(user, new_entry_dict, config):
+    """Save/update only today's row for the user, preserving all config rows and other data"""
     try:
         conn = get_connection()
         
-        # Build config rows DataFrame from config parameter (no need to read again)
-        if config:
-            column_names = list(config.keys())
-            
-            # Create config rows
-            config_rows = []
-            config_rows.append(column_names)  # Row 1: column names
-            config_rows.append([config[col]['display_name'] for col in column_names])  # Row 2
-            config_rows.append([config[col]['emoji'] for col in column_names])  # Row 3
-            config_rows.append([config[col]['units'] for col in column_names])  # Row 4
-            config_rows.append([config[col]['type'] for col in column_names])  # Row 5
-            config_rows.append([str(config[col]['has_goal']).upper() for col in column_names])  # Row 6
-            config_rows.append([config[col]['weekly_or_daily_goal'] for col in column_names])  # Row 7
-            config_rows.append([config[col]['goal_target'] if config[col]['goal_target'] is not None else '' for col in column_names])  # Row 8
-            config_rows.append([config[col]['goal_direction'] for col in column_names])  # Row 9
-            config_rows.append([config[col]['help_text'] for col in column_names])  # Row 10
-            
-            config_df = pd.DataFrame(config_rows, columns=column_names)
-            
-            # Combine config rows with data rows
-            # Ensure data_df has all columns from config
-            for col in column_names:
-                if col not in data_df.columns:
-                    data_df[col] = ''
-            
-            # Reorder columns to match config
-            data_df = data_df[column_names]
-            
-            # Convert boolean columns to 0/1 to match existing data format
-            for col_name, col_config in config.items():
-                if col_config.get('type', '') == 'boolean' and col_name in data_df.columns:
-                    # Convert True/False to 1/0
-                    data_df[col_name] = data_df[col_name].apply(
-                        lambda x: 1 if (x is True or str(x).upper() in ['TRUE', '1', 'YES', 'Y', 'T']) 
-                        else (0 if (x is False or str(x).upper() in ['FALSE', '0', 'NO', 'N', 'F'] or pd.isna(x)) else x)
-                    )
-            
-            # Combine config and data
-            full_df = pd.concat([config_df, data_df], ignore_index=True)
-        else:
-            # No config, just save data (but still try to convert booleans if we can detect them)
-            # This is a fallback - ideally config should always be provided
-            full_df = data_df
+        # Read the current sheet to get existing data and config rows
+        full_df = conn.read(worksheet=user, ttl="0")  # Don't cache on write
         
-        conn.update(worksheet=user, data=full_df)
+        if full_df.empty or len(full_df.columns) == 0:
+            st.error(f"Could not read existing data for {user}")
+            return False
+        
+        # Get today's date string
+        today = get_tracking_date_str()
+        
+        # Get column names from the sheet (to ensure we include all columns like notes, timestamp, etc.)
+        column_names = full_df.columns.tolist()
+        
+        # Convert boolean columns in new_entry to 0/1
+        if config:
+            for col_name, col_config in config.items():
+                if col_config.get('type', '') == 'boolean' and col_name in new_entry_dict:
+                    val = new_entry_dict[col_name]
+                    new_entry_dict[col_name] = 1 if (val is True or str(val).upper() in ['TRUE', '1', 'YES', 'Y', 'T']) else 0
+        
+        # Ensure new_entry has all required columns (fill missing ones with empty string)
+        for col in column_names:
+            if col not in new_entry_dict:
+                new_entry_dict[col] = ''
+        
+        # Build the new row as a list in the correct column order (matching sheet columns)
+        # Convert all values to native Python types (not numpy types) for JSON serialization
+        def to_native_type(val):
+            """Convert numpy/pandas types to native Python types"""
+            if val is None:
+                return ''
+            try:
+                if pd.isna(val):
+                    return ''
+            except (TypeError, ValueError):
+                pass
+            
+            # Get the type name to check for numpy types
+            type_name = type(val).__name__
+            type_module = type(val).__module__
+            
+            # Handle numpy types
+            if 'numpy' in type_module:
+                if 'int' in type_name:
+                    return int(val)
+                elif 'float' in type_name:
+                    return float(val)
+                elif 'bool' in type_name:
+                    return bool(val)
+            
+            # Handle pandas types
+            if 'pandas' in type_module:
+                if 'Timestamp' in type_name:
+                    return str(val)
+                elif 'int' in type_name:
+                    return int(val)
+                elif 'float' in type_name:
+                    return float(val)
+                elif 'bool' in type_name:
+                    return bool(val)
+            
+            # Handle datetime types
+            if isinstance(val, (datetime, date)):
+                return str(val)
+            
+            # Handle native Python types - return as-is
+            if isinstance(val, (int, float, bool, str)):
+                return val
+            
+            # Convert everything else to string
+            return str(val)
+        
+        new_row_values = [to_native_type(new_entry_dict.get(col, '')) for col in column_names]
+        
+        # Find if today's row already exists (check in data rows, starting from row 11)
+        CONFIG_ROWS_COUNT = 10
+        if len(full_df) > CONFIG_ROWS_COUNT:
+            # Check data rows (starting from index 10, which is row 11 in the sheet)
+            data_df = full_df.iloc[CONFIG_ROWS_COUNT:].copy()
+            data_df.columns = full_df.columns  # Preserve column names
+            
+            # Find the row with today's date
+            if 'date' in data_df.columns:
+                # Convert date column to string for comparison (handle both date and datetime objects)
+                data_df['date_str'] = data_df['date'].apply(lambda x: str(x) if pd.notna(x) else '')
+                today_row_idx = data_df[data_df['date_str'] == today].index
+                
+                if len(today_row_idx) > 0:
+                    # Update existing row
+                    # today_row_idx[0] is the index in data_df, which preserves the original full_df indices
+                    # So it's the index in full_df (which includes config rows)
+                    # Sheet row number = DataFrame index + 1 (convert 0-indexed to 1-indexed)
+                    # But if it's updating one row too early, we need to add 1 more
+                    # Convert to native Python int to avoid numpy int64 JSON serialization issues
+                    sheet_row_num = int(today_row_idx[0]) + 2
+                    
+                    # Update the specific row using gspread directly
+                    # Access the underlying gspread client
+                    client = conn._instance._client
+                    spreadsheet_url = conn._instance._spreadsheet
+                    spreadsheet = client.open_by_url(spreadsheet_url)
+                    worksheet = spreadsheet.worksheet(user)
+                    
+                    # Update the row (sheet_row_num is 1-indexed)
+                    worksheet.update(range_name=f'A{sheet_row_num}', values=[new_row_values])
+                    return True
+        
+        # If we get here, today's row doesn't exist - insert it
+        # Find the last row with actual data (not blank)
+        if len(full_df) > CONFIG_ROWS_COUNT:
+            # Get data rows
+            data_df = full_df.iloc[CONFIG_ROWS_COUNT:].copy()
+            data_df.columns = full_df.columns
+            
+            # Find the last row that has at least one non-empty value (excluding date column which should always exist)
+            last_data_row_idx = None
+            for idx in reversed(data_df.index):
+                row = data_df.loc[idx]
+                # Check if row has any non-empty values (besides date which might be the only thing)
+                has_data = False
+                for col in data_df.columns:
+                    val = row[col]
+                    if pd.notna(val) and str(val).strip() != '':
+                        has_data = True
+                        break
+                if has_data:
+                    last_data_row_idx = idx
+                    break
+            
+            if last_data_row_idx is not None:
+                # Insert right after the last data row
+                # last_data_row_idx is the index in full_df (which already accounts for config rows)
+                # Sheet row number = DataFrame index + 1 (convert 0-indexed to 1-indexed)
+                # insert_row with index=X inserts AT position X, pushing existing rows down
+                # To insert AFTER the last data row, we need: last_data_row_idx + 1 (to 1-index) + 1 (to insert after)
+                # But if it's inserting one row too early, we need to add one more
+                # Convert to native Python int to avoid numpy int64 JSON serialization issues
+                sheet_row_num = int(last_data_row_idx) + 3  # +1 for 1-indexed, +2 to insert after (one more than before)
+            else:
+                # No data rows found, insert after config rows
+                sheet_row_num = CONFIG_ROWS_COUNT + 1
+        else:
+            # No data rows yet, insert after config rows
+            sheet_row_num = CONFIG_ROWS_COUNT + 1
+        
+        # Ensure sheet_row_num is a native Python int
+        sheet_row_num = int(sheet_row_num)
+        
+        # Use gspread to insert the row
+        # Access the underlying gspread client
+        client = conn._instance._client
+        spreadsheet_url = conn._instance._spreadsheet
+        spreadsheet = client.open_by_url(spreadsheet_url)
+        worksheet = spreadsheet.worksheet(user)
+        
+        # Insert the new row
+        worksheet.insert_row(new_row_values, index=sheet_row_num)
         return True
+        
     except Exception as e:
         error_msg = str(e) if e else "Unknown error"
         error_type = type(e).__name__
@@ -511,23 +625,13 @@ with tab1:
         submitted = st.form_submit_button("💾 Save Today's Data", use_container_width=True)
 
         if submitted:
-            # Create new row
-            new_row = pd.DataFrame([new_entry])
-
-            # Remove old entry if updating
-            if already_logged and not df.empty:
-                st.session_state.df = df[df['date'] != today]
-            else:
-                st.session_state.df = df
-
-            # Add new row
-            st.session_state.df = pd.concat([st.session_state.df, new_row], ignore_index=True)
-
-            # Save to Google Sheets
-            if save_user_data(selected_user, st.session_state.df, config):
+            # Save to Google Sheets (only today's entry)
+            if save_user_data(selected_user, new_entry, config):
                 st.success("✅ Data saved successfully!")
                 st.balloons()
-                # Reload data (TTL cache will refresh on next read)
+                # Clear cache for batch loading function since we updated data
+                load_all_users_data.clear()
+                # Reload data (will use fresh data due to ttl="0" in save function)
                 st.session_state.df, st.session_state.config = load_user_data(selected_user)
             else:
                 st.error("Failed to save to Google Sheets")
