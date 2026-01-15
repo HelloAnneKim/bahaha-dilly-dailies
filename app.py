@@ -20,7 +20,7 @@ st.set_page_config(
 # Row 4: units
 # Row 5: type (boolean, int, float, note, date, timestamp)
 # Row 6: has_goal (TRUE/FALSE)
-# Row 7: weekly_or_daily_goal (weekly/daily/empty)
+# Row 7: weekly_or_daily_goal (daily/weekly_total/count_per_week/empty)
 # Row 8: goal_target (number or TRUE/FALSE)
 # Row 9: goal_direction (at_least/at_most/empty)
 # Row 10: help_text
@@ -62,7 +62,7 @@ def load_users():
     """Load list of users from the 'users' tab, column A, starting at row 2"""
     try:
         conn = get_connection()
-        df = conn.read(worksheet="users", ttl="300")  # Cache for 5 minutes
+        df = conn.read(worksheet="users", ttl="60")  # Cache for 60 seconds
         
         if df.empty or len(df.columns) == 0:
             return []
@@ -84,7 +84,7 @@ def load_column_config(user, df=None):
             conn = get_connection()
             # Read first 10 rows to get config
             # st-gsheets-connection uses row 1 as headers by default
-            config_df = conn.read(worksheet=user, ttl="300", usecols=None, nrows=10)  # Cache for 5 minutes
+            config_df = conn.read(worksheet=user, ttl="60", usecols=None, nrows=10)  # Cache for 60 seconds
         else:
             # Use provided df, but we need first 10 rows (which are rows 2-11 in the sheet)
             # Since row 1 is used as headers, iloc[0:9] gives us rows 2-10
@@ -142,11 +142,54 @@ def load_column_config(user, df=None):
         st.exception(e)
         return None
 
+@st.cache_data(ttl=60)  # Cache for 60 seconds
+def load_all_users_data(users_list):
+    """Load data for all users at once and cache the result"""
+    all_data = {}
+    conn = get_connection()
+    
+    for user in users_list:
+        try:
+            df = conn.read(worksheet=user, ttl="0")  # Use 0 here since we're caching at this level
+            
+            if df.empty or len(df.columns) == 0:
+                all_data[user] = (pd.DataFrame(), None)
+                continue
+            
+            # Get column config from the same dataframe to avoid duplicate API call
+            config = load_column_config(user, df)
+            if config is None:
+                all_data[user] = (pd.DataFrame(), None)
+                continue
+            
+            # Skip first 10 rows (config rows), use row 0 for column names
+            CONFIG_ROWS_COUNT = 10
+            if len(df) <= CONFIG_ROWS_COUNT:
+                # No data rows yet
+                all_data[user] = (pd.DataFrame(columns=list(config.keys())), config)
+                continue
+            
+            # Get data starting from row 10 (index 10)
+            data_df = df.iloc[10:].copy()
+            data_df.columns = df.columns  # Preserve column names from row 0
+            
+            # Reset index
+            data_df = data_df.reset_index(drop=True)
+            
+            all_data[user] = (data_df, config)
+        except Exception as e:
+            error_msg = str(e) if e else "Unknown error"
+            error_type = type(e).__name__
+            st.error(f"Error loading data for user '{user}': {error_type} - {error_msg}")
+            st.exception(e)
+            raise
+    return all_data
+
 def load_user_data(user):
     """Load data from user's specific Google Sheet tab, skipping config rows (1-10)"""
     try:
         conn = get_connection()
-        df = conn.read(worksheet=user, ttl="300")  # Cache for 5 minutes
+        df = conn.read(worksheet=user, ttl="60")  # Cache for 60 seconds
 
         if df.empty or len(df.columns) == 0:
             return pd.DataFrame(), None
@@ -324,11 +367,22 @@ for col_name, col_config in config.items():
                     goal_text += f"≤{goal_target} daily"
                 else:
                     goal_text += f"≥{goal_target} daily"
-        elif goal_type == 'weekly':
+        elif goal_type == 'weekly_total':
             if isinstance(goal_target, (int, float)) and goal_target > 0:
-                goal_text += f"{goal_target}x/week"
+                if goal_dir == 'at_most':
+                    goal_text += f"≤{goal_target} total/week"
+                else:
+                    goal_text += f"≥{goal_target} total/week"
             else:
-                goal_text += "Weekly goal"
+                goal_text += "Weekly total goal"
+        elif goal_type == 'count_per_week':
+            if isinstance(goal_target, (int, float)) and goal_target > 0:
+                if goal_dir == 'at_most':
+                    goal_text += f"≤{goal_target} days/week"
+                else:
+                    goal_text += f"≥{goal_target} days/week"
+            else:
+                goal_text += "Count per week goal"
         
         goals_list.append(goal_text)
 
@@ -615,23 +669,11 @@ with tab2:
 # Helper function to calculate user score dynamically
 def calculate_user_score(user, df, config):
     """Calculate user score based on column configuration"""
-    if df.empty or config is None:
+    if config is None:
         return 0
     
-    if 'date' not in df.columns:
-        return 0
-    
-    df['date'] = pd.to_datetime(df['date']).dt.date
-    df = df.sort_values('date')
-    
-    # Get yesterday's date in US Eastern Time
-    yesterday_et = get_yesterday()
-    
-    # Filter data to only include entries up to and including yesterday
-    df = df[df['date'] <= yesterday_et].copy()
-    
-    if df.empty:
-        return 0
+    # Get yesterday's date
+    yesterday = get_yesterday()
     
     # Get all columns with goals
     goal_columns = []
@@ -642,120 +684,193 @@ def calculate_user_score(user, df, config):
     if not goal_columns:
         return 0
     
+    # Prepare dataframe if it exists
+    if df.empty or 'date' not in df.columns:
+        # No data - all goals will be treated as not met (0)
+        return 0
+    
+    df['date'] = pd.to_datetime(df['date']).dt.date
+    df = df.sort_values('date')
+    
+    # Filter data to only include entries up to and including yesterday
+    df = df[df['date'] <= yesterday].copy()
+    
     # Calculate score for each goal
     goal_scores = []
     points_per_goal = 100.0 / len(goal_columns)  # Distribute points evenly
     
     for col_name, col_config in goal_columns:
-        if col_name not in df.columns:
-            continue
-        
         goal_type = col_config.get('weekly_or_daily_goal', '')
         goal_target = col_config.get('goal_target', None)
         goal_direction = col_config.get('goal_direction', 'at_least')
         col_type = col_config.get('type', 'note')
         
         if goal_type == 'daily':
-            # For daily goals, calculate percentage of days where goal was met
-            if col_type == 'boolean':
-                # Boolean: goal is met if value is True
-                # Convert goal_target to boolean if it's a string
-                goal_target_bool = False
-                if goal_target is True or str(goal_target).upper() == 'TRUE':
-                    goal_target_bool = True
-                
-                if goal_target_bool:
-                    # Convert column to boolean and sum
-                    col_data = df[col_name].apply(lambda x: str(x).upper() in ['TRUE', '1', 'YES', 'Y', 'T'] if pd.notna(x) else False)
-                    met_days = int(col_data.sum())
-                    total_days = len(df)
-                    rate = met_days / total_days if total_days > 0 else 0
-                else:
-                    rate = 0
-            else:
-                # Numeric: check if goal was met based on direction
-                col_data = pd.to_numeric(df[col_name], errors='coerce')
-                # Convert goal_target to numeric
-                try:
-                    goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else None
-                except (ValueError, TypeError):
-                    goal_target_num = None
-                
-                if goal_target_num is not None:
-                    if goal_direction == 'at_most':
-                        met_days = int((col_data <= goal_target_num).sum())
-                    else:  # at_least
-                        met_days = int((col_data >= goal_target_num).sum())
-                    total_days = len(col_data[col_data.notna()])
-                    rate = met_days / total_days if total_days > 0 else 0
-                else:
-                    rate = 0
+            # Daily: Use past 7 days of data (ending yesterday)
+            # Compute rate of days with goal met over days with data
+            # Score = (M/N) * points_per_goal where M = days met, N = days with data
+            # If N=0, score = 0
             
-            goal_scores.append(rate * points_per_goal)
+            week_start = yesterday - timedelta(days=6)  # 7 days including yesterday
             
-        elif goal_type == 'weekly':
-            # For weekly goals, calculate based on 7-day periods ending on or before yesterday
-            # Count how many times the goal was met in 7-day periods
-            if len(df) < 7:
-                # Not enough data for weekly calculation
+            # Filter to the 7-day period ending yesterday
+            week_df = df[(df['date'] >= week_start) & (df['date'] <= yesterday)].copy()
+            
+            if week_df.empty or col_name not in week_df.columns:
+                # No data - N=0, score = 0
                 goal_scores.append(0)
                 continue
             
-            # For weekly goals, we check if the goal was met in each 7-day window
-            # Only count windows that end on or before yesterday
-            windows_met = 0
-            total_windows = 0
+            # Get only rows that have data for this column (not NaN)
+            week_df_with_data = week_df[week_df[col_name].notna()].copy()
             
-            if col_type == 'boolean':
-                # Count occurrences in each 7-day window
-                # Convert goal_target to numeric
-                try:
-                    goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else 0
-                except (ValueError, TypeError):
-                    goal_target_num = 0
-                
-                # Iterate through 7-day windows, only counting those ending on or before yesterday
-                for i in range(7, len(df) + 1):
-                    window_df = df.iloc[i-7:i]
-                    # Check if the last day of this window is on or before yesterday
-                    window_end_date = window_df.iloc[-1]['date']
-                    if window_end_date <= yesterday_et:
-                        # Convert boolean column to numeric for summing
-                        col_data = window_df[col_name].apply(lambda x: str(x).upper() in ['TRUE', '1', 'YES', 'Y', 'T'] if pd.notna(x) else False)
-                        occurrences = int(col_data.sum())
-                        if isinstance(goal_target_num, (int, float)) and occurrences >= goal_target_num:
-                            windows_met += 1
-                        total_windows += 1
-                rate = windows_met / total_windows if total_windows > 0 else 0
-            else:
-                # For numeric weekly goals, sum over 7-day windows
-                col_data = pd.to_numeric(df[col_name], errors='coerce')
-                # Convert goal_target to numeric
-                try:
-                    goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else None
-                except (ValueError, TypeError):
-                    goal_target_num = None
-                
-                if goal_target_num is not None:
-                    # Iterate through 7-day windows, only counting those ending on or before yesterday
-                    for i in range(7, len(df) + 1):
-                        window_df = df.iloc[i-7:i]
-                        # Check if the last day of this window is on or before yesterday
-                        window_end_date = window_df.iloc[-1]['date']
-                        if window_end_date <= yesterday_et:
-                            window_sum = col_data.iloc[i-7:i].sum()
-                            if goal_direction == 'at_most':
-                                if window_sum <= goal_target_num:
-                                    windows_met += 1
-                            else:  # at_least
-                                if window_sum >= goal_target_num:
-                                    windows_met += 1
-                            total_windows += 1
-                    rate = windows_met / total_windows if total_windows > 0 else 0
+            if week_df_with_data.empty:
+                # No data for this column - N=0, score = 0
+                goal_scores.append(0)
+                continue
+            
+            num_dates_with_data = len(week_df_with_data)  # Number of days with data
+            
+            # Convert goal_target to numeric
+            try:
+                if col_type == 'boolean':
+                    # For boolean, goal_target should be 1 (True) or 0 (False)
+                    goal_target_num = 1 if (goal_target is True or str(goal_target).upper() in ['TRUE', '1']) else 0
                 else:
-                    rate = 0
+                    goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else None
+            except (ValueError, TypeError):
+                goal_target_num = None
             
-            goal_scores.append(rate * points_per_goal)
+            if goal_target_num is None:
+                goal_scores.append(0)
+                continue
+            
+            # Count days where goal was met (M)
+            num_days_with_goal_met = 0
+            for idx, row in week_df_with_data.iterrows():
+                value = row[col_name]
+                
+                # Convert value to numeric (treats boolean as 0/1)
+                if col_type == 'boolean':
+                    # Convert boolean to 0/1
+                    numeric_value = 1 if str(value).upper() in ['TRUE', '1', 'YES', 'Y', 'T', True] else 0
+                else:
+                    # Convert to numeric
+                    try:
+                        numeric_value = float(value) if pd.notna(value) else 0
+                    except (ValueError, TypeError):
+                        numeric_value = 0
+                
+                # Check if goal was met for this day
+                goal_met = False
+                if goal_direction == 'at_most':
+                    goal_met = numeric_value <= goal_target_num
+                else:  # at_least
+                    goal_met = numeric_value >= goal_target_num
+                
+                if goal_met:
+                    num_days_with_goal_met += 1
+            
+            # Calculate score: (M/N) * points_per_goal
+            if num_dates_with_data > 0:
+                score = (num_days_with_goal_met / num_dates_with_data) * points_per_goal
+            else:
+                score = 0
+            
+            goal_scores.append(score)
+            
+        elif goal_type == 'weekly_total':
+            # Weekly total: Sum up values over the preceding 7 days (ending yesterday)
+            # Check if total meets goal_threshold
+            # If no data, treat as 0
+            
+            week_start = yesterday - timedelta(days=6)  # 7 days including yesterday
+            
+            # Filter to the 7-day period ending yesterday
+            week_df = df[(df['date'] >= week_start) & (df['date'] <= yesterday)].copy()
+            
+            if week_df.empty or col_name not in week_df.columns:
+                # No data - treat sum as 0
+                week_sum = 0
+            else:
+                # Convert column to numeric (treats boolean as 0/1)
+                if col_type == 'boolean':
+                    # Convert boolean to 0/1 and sum
+                    col_data = week_df[col_name].apply(
+                        lambda x: 1 if (pd.notna(x) and str(x).upper() in ['TRUE', '1', 'YES', 'Y', 'T', True]) else 0
+                    )
+                    week_sum = float(col_data.sum())
+                else:
+                    # Convert to numeric and sum
+                    col_data = pd.to_numeric(week_df[col_name], errors='coerce')
+                    week_sum = float(col_data.sum()) if col_data.notna().any() else 0
+            
+            # Convert goal_target to numeric
+            try:
+                goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else None
+            except (ValueError, TypeError):
+                goal_target_num = None
+            
+            if goal_target_num is None:
+                goal_scores.append(0)
+                continue
+            
+            # Check if goal was met
+            goal_met = False
+            if goal_direction == 'at_most':
+                goal_met = week_sum <= goal_target_num
+            else:  # at_least
+                goal_met = week_sum >= goal_target_num
+            
+            # Weekly portion should still be counted even if there are fewer than 7 data points
+            goal_scores.append(points_per_goal if goal_met else 0)
+            
+        elif goal_type == 'count_per_week':
+            # Count per week: Count non-zero values in the 7-day period ending yesterday
+            # Check if count meets goal_threshold (at_most or at_least)
+            # If no data, treat count as 0
+            
+            week_start = yesterday - timedelta(days=6)  # 7 days including yesterday
+            
+            # Filter to the 7-day period ending yesterday
+            week_df = df[(df['date'] >= week_start) & (df['date'] <= yesterday)].copy()
+            
+            if week_df.empty or col_name not in week_df.columns:
+                # No data - treat count as 0
+                non_zero_count = 0
+            else:
+                # Count non-zero values (treats boolean True/1 as non-zero)
+                if col_type == 'boolean':
+                    # Count True/1 values
+                    col_data = week_df[col_name].apply(
+                        lambda x: 1 if (pd.notna(x) and str(x).upper() in ['TRUE', '1', 'YES', 'Y', 'T', True]) else 0
+                    )
+                    non_zero_count = int(col_data.sum())
+                else:
+                    # Convert to numeric and count non-zero values
+                    col_data = pd.to_numeric(week_df[col_name], errors='coerce')
+                    # Count values that are not NaN and not zero
+                    non_zero_count = int((col_data.notna() & (col_data != 0)).sum())
+            
+            # Convert goal_target to numeric
+            try:
+                goal_target_num = float(goal_target) if goal_target not in [None, '', 'None'] else None
+            except (ValueError, TypeError):
+                goal_target_num = None
+            
+            if goal_target_num is None:
+                goal_scores.append(0)
+                continue
+            
+            # Check if goal was met
+            goal_met = False
+            if goal_direction == 'at_most':
+                goal_met = non_zero_count <= goal_target_num
+            else:  # at_least
+                goal_met = non_zero_count >= goal_target_num
+            
+            # Count per week should still be counted even if there are fewer than 7 data points
+            goal_scores.append(points_per_goal if goal_met else 0)
     
     return sum(goal_scores)
 
@@ -767,8 +882,11 @@ with tab3:
 
     leaderboard_data = []
 
+    # Load all users' data in a single cached batch operation
+    all_users_data = load_all_users_data(users)
+
     for user in users:
-        user_specific_df, user_config = load_user_data(user)
+        user_specific_df, user_config = all_users_data.get(user, (pd.DataFrame(), None))
 
         if user_specific_df.empty or len(user_specific_df) == 0 or user_config is None:
             continue
@@ -781,13 +899,13 @@ with tab3:
         leaderboard_data.append({
             'User': user.capitalize(),
             'Total Days': total_days,
-            'Overall Score': round(score, 1)
+            'Score': round(score, 1)
         })
 
     if leaderboard_data:
         # Create leaderboard DataFrame
         lb_df = pd.DataFrame(leaderboard_data)
-        lb_df = lb_df.sort_values('Overall Score', ascending=False).reset_index(drop=True)
+        lb_df = lb_df.sort_values('Score', ascending=False).reset_index(drop=True)
         lb_df.index = lb_df.index + 1
 
         # Display podium
@@ -800,7 +918,7 @@ with tab3:
                 medal = medals[idx] if idx < len(medals) else '🏅'
                 st.markdown(f"### {medal} #{i}")
                 st.markdown(f"### {row['User']}")
-                st.metric("Score", f"{row['Overall Score']:.1f}/100")
+                st.metric("Score", f"{row['Score']:.1f}/100")
                 st.caption(f"{row['Total Days']} days logged")
 
         # Detailed view
@@ -809,7 +927,7 @@ with tab3:
 
         st.caption("""
         **Scoring System**: Each person is scored out of 100 based on their individual goals.
-        Scores reflect what percentage of personal goals were met across all logged days.
+        Scores reflect what percentage of personal goals were met across all logged days in the preceding week.
         """)
 
     else:
